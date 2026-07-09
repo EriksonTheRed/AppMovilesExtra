@@ -22,18 +22,30 @@ class ServerViewModel(
     private val _lastQuery = MutableStateFlow("")
     val lastQuery: StateFlow<String> = _lastQuery.asStateFlow()
 
+    private var serverStarted = false
+
     fun startServer() {
+
+        if (serverStarted) return
+
+        serverStarted = true
 
         viewModelScope.launch {
 
             _connected.value = controller.start()
 
-            Log.d("SEARCH_FLOW", "Servidor conectado = ${_connected.value}")
-
             if (_connected.value) {
+
                 listen()
+
+            } else {
+
+                serverStarted = false
+
             }
+
         }
+
     }
 
     private suspend fun listen() {
@@ -86,8 +98,12 @@ class ServerViewModel(
 
     fun stopServer() {
 
+        serverStarted = false
+
         controller.stop()
+
         _connected.value = false
+
     }
 
     override fun onCleared() {

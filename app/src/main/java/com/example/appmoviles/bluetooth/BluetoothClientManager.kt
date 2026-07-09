@@ -29,7 +29,11 @@ class BluetoothClientManager(
     suspend fun connect(): Boolean =
         withContext(Dispatchers.IO) {
 
-            Log.d("SEARCH_FLOW", "Bluetooth enviando mensaje...")
+            if (isConnected) {
+                Log.d("SEARCH_FLOW", "Ya existe una conexión Bluetooth.")
+                return@withContext true
+            }
+
             try {
 
 

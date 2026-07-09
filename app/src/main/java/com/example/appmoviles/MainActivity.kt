@@ -4,7 +4,6 @@ package com.example.appmoviles
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
@@ -42,7 +41,7 @@ import com.example.appmoviles.ui.ClientViewModelFactory
 import com.example.appmoviles.ui.ServerViewModelFactory
 import com.example.appmoviles.ui.client.ClientViewModel
 import com.example.appmoviles.ui.client.DevicePickerScreen
-import com.example.appmoviles.ui.client.PlayerScreen
+import com.example.appmoviles.ui.client.player.PlayerScreen
 import com.example.appmoviles.ui.client.SearchScreen
 import com.example.appmoviles.ui.home.ModeSelectorScreen
 import com.example.appmoviles.ui.server.ServerScreen

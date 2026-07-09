@@ -31,6 +31,8 @@ class ClientViewModel(
     val error: StateFlow<String?> =
         _error.asStateFlow()
 
+    private var searching = false
+
     fun connect() {
         viewModelScope.launch {
             _connected.value = controller.connect()
@@ -44,28 +46,41 @@ class ClientViewModel(
 
     fun search(query: String) {
 
-        Log.d("SEARCH_FLOW", "ViewModel.search($query)")
+        if (searching) return
+
+        searching = true
+
         viewModelScope.launch {
 
-            _error.value = null
+            try {
 
-            controller.sendSearch(query)
+                _error.value = null
 
-            when (val response = controller.waitMessage()) {
+                controller.sendSearch(query)
 
-                is ControlMessage.SearchResults -> {
-                    _searchResults.value = response.results
+                when (val response = controller.waitMessage()) {
+
+                    is ControlMessage.SearchResults -> {
+                        _searchResults.value = response.results
+                    }
+
+                    is ControlMessage.ErrorMessage -> {
+                        _error.value = response.message
+                    }
+
+                    else -> {
+                        _error.value = "Respuesta desconocida."
+                    }
                 }
 
-                is ControlMessage.ErrorMessage -> {
-                    _error.value = response.message
-                }
+            } finally {
 
-                else -> {
-                    _error.value = "Respuesta desconocida."
-                }
+                searching = false
+
             }
+
         }
+
     }
 
     fun play(
