@@ -1,4 +1,4 @@
-@file:kotlin.OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class)
 
 package com.example.appmoviles
 
@@ -21,33 +21,27 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+
 import com.example.appmoviles.bluetooth.BluetoothClientManager
 import com.example.appmoviles.bluetooth.BluetoothServerManager
-import com.example.appmoviles.cache.VideoCacheManager
-import com.example.appmoviles.data.local.AppDatabase
-import com.example.appmoviles.data.repository.FavoritesRepository
-import com.example.appmoviles.data.repository.HistoryRepository
+import com.example.appmoviles.controller.ClientController
+import com.example.appmoviles.controller.ServerController
 import com.example.appmoviles.player.PlayerManager
+import com.example.appmoviles.transfer.VideoTransferManager
 import com.example.appmoviles.ui.ClientViewModelFactory
 import com.example.appmoviles.ui.ServerViewModelFactory
 import com.example.appmoviles.ui.client.ClientViewModel
 import com.example.appmoviles.ui.client.DevicePickerScreen
-import com.example.appmoviles.ui.client.FavoritesScreen
-import com.example.appmoviles.ui.client.HistoryScreen
 import com.example.appmoviles.ui.client.PlayerScreen
 import com.example.appmoviles.ui.client.SearchScreen
 import com.example.appmoviles.ui.home.ModeSelectorScreen
@@ -55,152 +49,235 @@ import com.example.appmoviles.ui.server.ServerScreen
 import com.example.appmoviles.ui.server.ServerViewModel
 import com.example.appmoviles.ui.theme.AppMovilesTheme
 import com.example.appmoviles.ui.theme.AppTheme
-import com.example.appmoviles.video.MockYouTubeProvider
-import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
-import java.io.File
-import android.util.Log
+import com.example.appmoviles.video.VideoProvider
+import com.example.appmoviles.video.provider.NewPipeVideoProvider
 
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { AppMovilesRoot() }
+
+        setContent {
+            AppMovilesRoot()
+        }
     }
 }
 
-private val requiredPermissions: Array<String> =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-        arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN)
-    else emptyArray()
-
-@SuppressLint("MissingPermission")
-@OptIn(UnstableApi::class, ExperimentalMaterial3Api::class, ExperimentalMaterial3Api::class)
-@Composable
-fun AppMovilesRoot() {
-    var theme by remember { mutableStateOf(AppTheme.GUINDA) }
-    var forceDark by remember { mutableStateOf<Boolean?>(null) }
-    var permissionsGranted by remember { mutableStateOf(requiredPermissions.isEmpty()) }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { result -> permissionsGranted = result.values.all { it } }
-
-    LaunchedEffect(Unit) {
-        if (requiredPermissions.isNotEmpty()) permissionLauncher.launch(requiredPermissions)
+private val requiredPermissions =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        arrayOf(
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_SCAN
+        )
+    } else {
+        emptyArray()
     }
 
-    AppMovilesTheme(appTheme = theme, forceDarkMode = forceDark) {
+@SuppressLint("MissingPermission")
+@OptIn(
+    UnstableApi::class,
+    ExperimentalMaterial3Api::class
+)
+@Composable
+fun AppMovilesRoot() {
+
+    var theme by remember {
+        mutableStateOf(AppTheme.GUINDA)
+    }
+
+    var forceDark by remember {
+        mutableStateOf<Boolean?>(null)
+    }
+
+    var permissionsGranted by remember {
+        mutableStateOf(requiredPermissions.isEmpty())
+    }
+
+    val permissionLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions()
+        ) { result ->
+            permissionsGranted = result.values.all { it }
+        }
+
+    LaunchedEffect(Unit) {
+        if (requiredPermissions.isNotEmpty()) {
+            permissionLauncher.launch(requiredPermissions)
+        }
+    }
+
+    AppMovilesTheme(
+        appTheme = theme,
+        forceDarkMode = forceDark
+    ) {
+
         if (!permissionsGranted) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+
                 Text(
-                    "Se necesitan permisos de Bluetooth para continuar.\nActívalos en Ajustes.",
+                    text = "Se requieren permisos Bluetooth.",
                     modifier = Modifier.padding(24.dp),
                     style = MaterialTheme.typography.bodyLarge
                 )
             }
+
             return@AppMovilesTheme
         }
 
         val context = LocalContext.current
+
         val navController = rememberNavController()
 
         val bluetoothManager = remember {
-            context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+            context.getSystemService(
+                Context.BLUETOOTH_SERVICE
+            ) as BluetoothManager
         }
-        val adapter: BluetoothAdapter = remember { bluetoothManager.adapter }
-        val videoProvider = remember { MockYouTubeProvider() }
-        val cache = remember { VideoCacheManager(File(context.cacheDir, "video_cache")) }
-        val db = remember { AppDatabase.getInstance(context) }
-        val historyRepo = remember { HistoryRepository(db.historyDao()) }
-        val favoritesRepo = remember { FavoritesRepository(db.favoriteDao()) }
 
-        // ClientViewModel compartido entre todas las pantallas del Cliente
-        var selectedDevice by remember { mutableStateOf<BluetoothDevice?>(null) }
-        val clientViewModel: ClientViewModel? = remember(selectedDevice) {
-            Log.d("DIAG_MAIN", "selectedDevice=$selectedDevice")
-            selectedDevice?.let { device ->
-                Log.d("DIAG_MAIN", "Creando ClientViewModel para device=$device")
-                val viewModel = ClientViewModelFactory(
-                    BluetoothClientManager(device, adapter),
-                    PlayerManager(context),
-                    historyRepo,
-                    favoritesRepo
-                ).create(ClientViewModel::class.java)
-                Log.d("DIAG_MAIN", "ClientViewModel creado exitosamente")
-                viewModel
+        val adapter = remember {
+            bluetoothManager.adapter
+        }
+
+        val transferManager = remember {
+            VideoTransferManager()
+        }
+
+        val provider: VideoProvider = remember {
+            NewPipeVideoProvider()
+        }
+
+        var selectedDevice by remember {
+            mutableStateOf<BluetoothDevice?>(null)
+        }
+        val clientViewModel: ClientViewModel? =
+            remember(selectedDevice) {
+
+                selectedDevice?.let { device ->
+
+                    val bluetooth =
+                        BluetoothClientManager(
+                            device = device,
+                            adapter = adapter
+                        )
+
+                    val controller =
+                        ClientController(
+                            bluetooth = bluetooth,
+                            transfer = transferManager
+                        )
+
+                    ClientViewModelFactory(
+                        controller = controller,
+                        playerManager = PlayerManager(context)
+                    ).create(ClientViewModel::class.java)
+                }
             }
-        }
 
-        NavHost(navController = navController, startDestination = "home") {
+        val serverViewModel: ServerViewModel =
+            composeViewModel(
+                factory = ServerViewModelFactory(
+                    controller = ServerController(
+                        bluetooth = BluetoothServerManager(adapter),
+                        transfer = transferManager,
+                        videoProvider = provider
+                    ),
+                    provider = provider
+                )
+            )
 
+        NavHost(
+            navController = navController,
+            startDestination = "home"
+        ) {
             composable("home") {
+
                 ModeSelectorScreen(
                     currentTheme = theme,
                     onThemeChange = { theme = it },
                     forceDarkMode = forceDark,
                     onDarkModeChange = { forceDark = it },
-                    onSelectServer = { navController.navigate("server") },
-                    onSelectClient = { navController.navigate("device_picker") }
+                    onSelectServer = {
+                        navController.navigate("server")
+                    },
+                    onSelectClient = {
+                        navController.navigate("device_picker")
+                    }
                 )
             }
 
             composable("server") {
-                val serverManager = remember {
-                    BluetoothServerManager(adapter, videoProvider, cache)
-                }
-                val viewModel: ServerViewModel = composeViewModel(
-                    factory = ServerViewModelFactory(
-                        serverManager,
-                        context = context   // <-- context declarado en línea 99
-                    )
+
+                ServerScreen(
+                    viewModel = serverViewModel
                 )
-                ServerScreen(viewModel)
             }
 
-            // Pantalla de selección de dispositivo (NUEVO)
             composable("device_picker") {
+
                 DevicePickerScreen(
                     adapter = adapter,
                     onDeviceSelected = { device ->
+
                         selectedDevice = device
+
                         navController.navigate("search") {
-                            popUpTo("device_picker") { inclusive = true }
+
+                            popUpTo("device_picker") {
+                                inclusive = true
+                            }
                         }
                     }
                 )
             }
 
             composable("search") {
+
                 val vm = clientViewModel
+
                 if (vm == null) {
-                    navController.navigate("device_picker")
+
+                    LaunchedEffect(Unit) {
+                        navController.navigate("device_picker")
+                    }
+
                 } else {
-                    LaunchedEffect(Unit) { vm.connect() }
+
+                    LaunchedEffect(Unit) {
+                        vm.connect()
+                    }
+
                     SearchScreen(
                         viewModel = vm,
-                        onVideoSelected = { navController.navigate("player") }
+                        onVideoSelected = {
+                            navController.navigate("player")
+                        }
                     )
                 }
             }
 
             composable("player") {
-                val vm = clientViewModel
-                if (vm == null) navController.navigate("device_picker")
-                else PlayerScreen(
-                    viewModel = vm,
-                    onBack = { navController.popBackStack() }
-                )
-            }
 
-            composable("history") {
                 val vm = clientViewModel
-                if (vm == null) navController.navigate("device_picker")
-                else HistoryScreen(vm)
-            }
 
-            composable("favorites") {
-                val vm = clientViewModel
-                if (vm == null) navController.navigate("device_picker")
-                else FavoritesScreen(vm)
+                if (vm == null) {
+
+                    LaunchedEffect(Unit) {
+                        navController.navigate("device_picker")
+                    }
+
+                } else {
+
+                    PlayerScreen(
+                        viewModel = vm,
+                        onBack = {
+                            navController.popBackStack()
+                        }
+                    )
+                }
             }
         }
     }

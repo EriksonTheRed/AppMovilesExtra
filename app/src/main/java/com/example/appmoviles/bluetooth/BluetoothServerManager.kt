@@ -2,67 +2,60 @@ package com.example.appmoviles.bluetooth
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
-import com.example.appmoviles.bluetooth.protocol.ProtocolConstants.APP_UUID
+import android.bluetooth.BluetoothServerSocket
 import com.example.appmoviles.bluetooth.protocol.ControlMessage
 import com.example.appmoviles.bluetooth.protocol.MessageIO
+import com.example.appmoviles.bluetooth.protocol.ProtocolConstants.APP_UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import android.util.Log
+import java.io.IOException
 
-class BluetoothClientManager(
-    private val device: BluetoothDevice,
+class BluetoothServerManager(
     private val adapter: BluetoothAdapter
 ) {
 
+    private var serverSocket: BluetoothServerSocket? = null
+
     private var connection: BluetoothConnection? = null
+
     private var messageIO: MessageIO? = null
 
     val isConnected: Boolean
         get() = connection?.isConnected == true
 
     /**
-     * Conecta con el servidor Bluetooth.
+     * Espera a que un cliente se conecte.
      */
-
     @SuppressLint("MissingPermission")
-    suspend fun connect(): Boolean =
+    suspend fun start(): Boolean =
         withContext(Dispatchers.IO) {
 
-            Log.d("SEARCH_FLOW", "Bluetooth enviando mensaje...")
             try {
 
+                serverSocket =
+                    adapter.listenUsingRfcommWithServiceRecord(
+                        "AppMoviles",
+                        APP_UUID
+                    )
 
-
-                adapter.cancelDiscovery()
-
-                val socket =
-                    device.createRfcommSocketToServiceRecord(APP_UUID)
-
-                socket.connect()
+                val socket = serverSocket!!.accept()
 
                 connection = BluetoothConnection(socket)
 
                 messageIO = MessageIO(connection!!)
 
-                Log.d("SEARCH_FLOW", "Mensaje enviado correctamente")
-
                 true
-
-
 
             } catch (_: Exception) {
 
-                Log.e("SEARCH_FLOW", "Error enviando mensaje")
-
-                disconnect()
+                stop()
 
                 false
             }
         }
 
     /**
-     * Envía un mensaje de control.
+     * Envía un mensaje de control al cliente.
      */
     suspend fun sendMessage(
         message: ControlMessage
@@ -72,7 +65,7 @@ class BluetoothClientManager(
     }
 
     /**
-     * Espera un mensaje proveniente del servidor.
+     * Espera un mensaje del cliente.
      */
     suspend fun receiveMessage(): ControlMessage? {
 
@@ -88,9 +81,6 @@ class BluetoothClientManager(
 
     /**
      * Devuelve la conexión Bluetooth.
-     *
-     * Será utilizada por VideoTransferManager
-     * para enviar o recibir los bytes del video.
      */
     fun getConnection(): BluetoothConnection? {
 
@@ -98,13 +88,27 @@ class BluetoothClientManager(
     }
 
     /**
-     * Cierra completamente la conexión.
+     * Finaliza la conexión y libera recursos.
      */
-    fun disconnect() {
+    fun stop() {
 
-        connection?.close()
+        try {
+
+            connection?.close()
+
+        } catch (_: IOException) {
+        }
+
+        try {
+
+            serverSocket?.close()
+
+        } catch (_: IOException) {
+        }
 
         connection = null
+
+        serverSocket = null
 
         messageIO = null
     }

@@ -1,209 +1,584 @@
-@file:kotlin.OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.media3.common.util.UnstableApi::class,
+    androidx.compose.material3.ExperimentalMaterial3Api::class
+)
 
 package com.example.appmoviles.ui.client
 
-import android.annotation.SuppressLint
-import androidx.annotation.OptIn
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
-import com.example.appmoviles.models.ConnectionState
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 
-@SuppressLint("OpaqueUnitKey")
-@OptIn(UnstableApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerScreen(
     viewModel: ClientViewModel,
     onBack: () -> Unit
 ) {
-    val video by viewModel.currentVideo.collectAsState()
-    val connectionState by viewModel.connectionState.collectAsState()
-    val unsafeWarning by viewModel.unsafeSourceWarning.collectAsState()
-    val isPrivacy by viewModel.isPrivacyMode.collectAsState()
-    val isLowPower by viewModel.playerManager.lowPowerMode.collectAsState()
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
 
-    // Seek slider state actualizado periódicamente
+    var controlsVisible by remember { mutableStateOf(true) }
     var sliderPosition by remember { mutableFloatStateOf(0f) }
     var isPlaying by remember { mutableStateOf(false) }
 
-    // Actualiza la posición del slider cada segundo
+    /**
+     * Actualiza slider y estado del reproductor
+     */
     LaunchedEffect(Unit) {
-        while (isActive) {
-            val duration = viewModel.playerManager.duration()
-            val position = viewModel.playerManager.currentPosition()
-            if (duration > 0) sliderPosition = position.toFloat() / duration.toFloat()
-            isPlaying = viewModel.playerManager.getExoPlayerInstance()?.isPlaying ?: false
-            delay(1000)
+
+        while (true) {
+
+            val duration = viewModel.duration()
+            val position = viewModel.currentPosition()
+
+            if (duration > 0) {
+                sliderPosition =
+                    position.toFloat() / duration.toFloat()
+            }
+
+            isPlaying = viewModel.isPlaying()
+
+            delay(250)
         }
     }
 
-    // Al salir de la pantalla, cancelar el stream activo para no generar el loop
+    /**
+     * Oculta controles automáticamente
+     */
+    LaunchedEffect(controlsVisible) {
+
+        if (controlsVisible) {
+
+            delay(3000)
+
+            controlsVisible = false
+        }
+    }
+
     DisposableEffect(Unit) {
+
         onDispose {
-            viewModel.onLeavePlayer()
+
+            viewModel.pause()
+
         }
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(title = { Text(video?.title ?: "Reproductor") })
-        }
+
+        containerColor = Color.Black,
+
+        topBar = {}
+
     ) { padding ->
+
         Column(
+
             modifier = Modifier
                 .fillMaxSize()
+                .background(Color.Black)
                 .padding(padding)
-                .padding(16.dp)
+
         ) {
-            // Advertencia de fuente no verificada
-            if (unsafeWarning) {
-                Card(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-                    Text(
-                        "⚠️ Contenido de fuente no verificada",
-                        modifier = Modifier.padding(12.dp),
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
 
-            // Indicador de conexión
-            val (connEmoji, connLabel) = when (connectionState) {
-                is ConnectionState.Connected -> "🟢" to "Conexión estable"
-                is ConnectionState.Reconnecting -> "🟡" to "Reconectando..."
-                is ConnectionState.Lost -> "🔴" to "Conexión perdida"
-                else -> "⚫" to "Sin conexión"
-            }
-            Text(
-                "$connEmoji $connLabel",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
+            /**
+             * Zona del video
+             */
+            Box(
 
-            // Vista del reproductor ExoPlayer
-            AndroidView(
-                factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        player = viewModel.playerManager.getExoPlayerInstance()
-                        useController = false // usamos nuestros propios controles
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .background(Color.Black)
+                    .clickable {
+
+                        controlsVisible = !controlsVisible
+
                     }
-                },
-                update = { playerView ->
-                    playerView.player = viewModel.playerManager.getExoPlayerInstance()
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(220.dp)
-            )
 
-            Spacer(Modifier.height(16.dp))
-
-            // Controles de reproducción
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
             ) {
-                Button(onClick = {
-                    viewModel.seekTo(
-                        (viewModel.playerManager.currentPosition() - 10_000).coerceAtLeast(0)
-                    )
-                }) { Text("⏮ -10s") }
 
-                Button(
-                    onClick = {
-                        if (isPlaying) viewModel.pause() else viewModel.resume()
+                AndroidView(
+
+                    modifier = Modifier.fillMaxSize(),
+
+                    factory = { context ->
+
+                        PlayerView(context).apply {
+
+                            player =
+                                viewModel.playerManager.getPlayer()
+
+                            useController = false
+
+                        }
+
                     },
-                    modifier = Modifier.padding(horizontal = 8.dp)
-                ) {
-                    Text(if (isPlaying) "⏸ Pausar" else "▶ Reproducir")
+
+                    update = {
+
+                        it.player =
+                            viewModel.playerManager.getPlayer()
+
+                    }
+
+                )
+
+                /**
+                 * Controles flotantes
+                 */
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = controlsVisible,
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ){
+
+                    Box(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+
+                        /**
+                         * Barra superior
+                         */
+                        Row(
+
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+
+                            horizontalArrangement =
+                                Arrangement.SpaceBetween,
+
+                            verticalAlignment =
+                                Alignment.CenterVertically
+
+                        ) {
+
+                            IconButton(
+
+                                onClick = {
+
+                                    viewModel.pause()
+
+                                    onBack()
+
+                                }
+
+                            ) {
+
+                                Icon(
+                                    Icons.Default.ArrowBack,
+                                    contentDescription = null,
+                                    tint = Color.White
+                                )
+
+                            }
+
+                            Row {
+
+                                IconButton(
+                                    onClick = { }
+                                ) {
+
+                                    Icon(
+                                        Icons.Default.Settings,
+                                        null,
+                                        tint = Color.White
+                                    )
+
+                                }
+
+                                IconButton(
+                                    onClick = { }
+                                ) {
+
+                                    Icon(
+                                        Icons.Default.Fullscreen,
+                                        null,
+                                        tint = Color.White
+                                    )
+
+                                }
+
+                            }
+
+                        }
+
+                        /**
+                         * Botón Play/Pause gigante
+                         */
+                        Box(
+
+                            modifier = Modifier.fillMaxSize(),
+
+                            contentAlignment = Alignment.Center
+
+                        ) {
+
+                            FloatingActionButton(
+
+                                containerColor =
+                                    MaterialTheme.colorScheme.primary,
+
+                                onClick = {
+
+                                    if (isPlaying)
+                                        viewModel.pause()
+                                    else
+                                        viewModel.resume()
+
+                                    isPlaying = !isPlaying
+
+                                }
+
+                            ) {
+
+                                Icon(
+
+                                    if (isPlaying)
+                                        Icons.Default.Pause
+                                    else
+                                        Icons.Default.PlayArrow,
+
+                                    contentDescription = null
+
+                                )
+
+                            }
+
+                        }
+
+                    }
+
                 }
 
-                Button(onClick = {
-                    val duration = viewModel.playerManager.duration()
-                    val newPos = viewModel.playerManager.currentPosition() + 10_000
-                    viewModel.seekTo(newPos.coerceAtMost(duration))
-                }) { Text("+10s ⏭") }
             }
 
-            // Barra de progreso
-            androidx.compose.material3.Slider(
-                value = sliderPosition,
-                onValueChange = { newValue ->
-                    sliderPosition = newValue
-                    val duration = viewModel.playerManager.duration()
-                    if (duration > 0) viewModel.seekTo((newValue * duration).toLong())
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
+            /**
+             * ----
+             * Aquí continuará la Parte 2
+             * ----
+             */
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "Reproductor Bluetooth",
+                style = MaterialTheme.typography.titleLarge,
+                color = Color.White,
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
 
-            // Toggles
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Solo audio (bajo consumo)", modifier = Modifier.weight(1f))
-                Switch(
-                    checked = isLowPower,
-                    onCheckedChange = { viewModel.setLowPowerMode(it) }
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Slider(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+
+                value = sliderPosition,
+
+                onValueChange = { value ->
+
+                    sliderPosition = value
+
+                    val duration = viewModel.duration()
+
+                    if (duration > 0L) {
+
+                        viewModel.seekTo(
+                            (value * duration).toLong()
+                        )
+
+                    }
+
+                }
+            )
+
+            fun formatTime(ms: Long): String {
+
+                if (ms <= 0L)
+                    return "00:00"
+
+                val total = ms / 1000
+
+                val minutes = total / 60
+
+                val seconds = total % 60
+
+                return "%02d:%02d".format(
+                    minutes,
+                    seconds
                 )
+
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp),
+
+                horizontalArrangement =
+                    Arrangement.SpaceBetween
+
             ) {
-                Text("Modo privacidad", modifier = Modifier.weight(1f))
-                Switch(
-                    checked = isPrivacy,
-                    onCheckedChange = { viewModel.setPrivacyMode(it) }
+
+                Text(
+                    formatTime(viewModel.currentPosition()),
+                    color = Color.LightGray
                 )
+
+                Text(
+                    formatTime(viewModel.duration()),
+                    color = Color.LightGray
+                )
+
             }
 
-            // Favorito
-            video?.let { v ->
-                Button(
-                    onClick = { viewModel.toggleFavorite(v) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp)
-                ) { Text("⭐ Agregar / Quitar de favoritos") }
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Row(
+
+                modifier = Modifier.fillMaxWidth(),
+
+                horizontalArrangement =
+                    Arrangement.SpaceEvenly,
+
+                verticalAlignment =
+                    Alignment.CenterVertically
+
+            ) {
+
+                FilledTonalButton(
+
+                    onClick = {
+
+                        val position =
+                            (viewModel.currentPosition() - 10_000)
+                                .coerceAtLeast(0)
+
+                        viewModel.seekTo(position)
+
+                    }
+
+                ) {
+
+                    Text("⏪ 10 s")
+
+                }
+
+                FilledIconButton(
+
+                    modifier = Modifier.size(72.dp),
+
+                    onClick = {
+
+                        if (isPlaying)
+                            viewModel.pause()
+                        else
+                            viewModel.resume()
+
+                        isPlaying = !isPlaying
+
+                    }
+
+                ) {
+
+                    Icon(
+
+                        if (isPlaying)
+                            Icons.Default.Pause
+                        else
+                            Icons.Default.PlayArrow,
+
+                        null
+
+                    )
+
+                }
+
+                FilledTonalButton(
+
+                    onClick = {
+
+                        val duration =
+                            viewModel.duration()
+
+                        val position =
+                            (viewModel.currentPosition() + 10_000)
+                                .coerceAtMost(duration)
+
+                        viewModel.seekTo(position)
+
+                    }
+
+                ) {
+
+                    Text("10 s ⏩")
+
+                }
+
             }
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            Card(
+
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+
+                colors = CardDefaults.cardColors(
+                    containerColor =
+                        Color(0xFF1F1F1F)
+                )
+
+            ) {
+
+                Column(
+
+                    modifier = Modifier.padding(16.dp)
+
+                ) {
+
+                    Text(
+
+                        text = when {
+
+                            viewModel.isPlaying() ->
+                                "▶ Reproduciendo"
+
+                            else ->
+                                "⏸ Pausado"
+
+                        },
+
+                        color = Color.White,
+
+                        style =
+                            MaterialTheme.typography.titleMedium
+
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(10.dp)
+                    )
+
+                    Text(
+
+                        text = "Bluetooth Streaming",
+
+                        color = Color.Gray
+
+                    )
+
+                }
+
+            }
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            Row(
+
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+
+                horizontalArrangement =
+                    Arrangement.SpaceEvenly
+
+            ) {
+
+                OutlinedButton(
+
+                    onClick = {
+
+                        /* Calidad
+                           Se implementará en la Fase 2 */
+
+                    }
+
+                ) {
+
+                    Icon(
+                        Icons.Default.Settings,
+                        null
+                    )
+
+                    Spacer(
+                        Modifier.width(8.dp)
+                    )
+
+                    Text("Calidad")
+
+                }
+
+                OutlinedButton(
+
+                    onClick = {
+
+                        /* Fullscreen
+                           Se implementará en la siguiente fase */
+
+                    }
+
+                ) {
+
+                    Icon(
+                        Icons.Default.Fullscreen,
+                        null
+                    )
+
+                    Spacer(
+                        Modifier.width(8.dp)
+                    )
+
+                    Text("Pantalla completa")
+
+                }
+
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            Button(
+
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+
+                onClick = {
+
+                    viewModel.pause()
+
+                    onBack()
+
+                }
+
+            ) {
+
+                Text("Volver")
+
+            }
+
         }
+
     }
+
 }
