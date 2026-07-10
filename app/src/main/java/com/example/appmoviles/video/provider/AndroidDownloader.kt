@@ -22,18 +22,19 @@ class AndroidDownloader : Downloader() {
     @Throws(IOException::class)
     override fun execute(request: Request): Response {
 
+        val totalStart = System.nanoTime()
+
+        val builderStart = System.nanoTime()
 
         val builder = okhttp3.Request.Builder()
             .url(request.url())
 
-        // Headers
         request.headers().forEach { (key, values) ->
             values.forEach { value ->
                 builder.addHeader(key, value)
             }
         }
 
-        // Método HTTP
         when (request.httpMethod()) {
 
             "GET" -> builder.get()
@@ -41,24 +42,6 @@ class AndroidDownloader : Downloader() {
             "HEAD" -> builder.head()
 
             "POST" -> {
-
-                Log.d(
-
-                    "SEARCH_FLOW",
-
-                    "Headers = ${request.headers()}"
-
-                )
-
-
-
-                Log.d(
-
-                    "SEARCH_FLOW",
-
-                    "Body enviado = ${request.dataToSend()?.decodeToString()}"
-
-                )
 
                 val requestBody = request.dataToSend()?.toRequestBody()
 
@@ -71,20 +54,45 @@ class AndroidDownloader : Downloader() {
             else -> throw IOException("Método HTTP no soportado: ${request.httpMethod()}")
         }
 
+        Log.d(
+            "HTTP_TIME",
+            "Preparar Request = ${(System.nanoTime() - builderStart) / 1_000_000} ms"
+        )
+
+        // ==========================
+        // Petición HTTP
+        // ==========================
+
+        val networkStart = System.nanoTime()
+
         val response = client.newCall(builder.build()).execute()
+
+        Log.d(
+            "HTTP_TIME",
+            "HTTP ${response.code} ${response.request.url}"
+        )
+
+        Log.d(
+            "HTTP_TIME",
+            "Tiempo red = ${(System.nanoTime() - networkStart) / 1_000_000} ms"
+        )
+
+        // ==========================
+        // Lectura del Body
+        // ==========================
+
+        val bodyStart = System.nanoTime()
 
         val body = response.body?.string() ?: ""
 
         Log.d(
-            "SEARCH_FLOW",
-            "HTTP ${response.code} URL=${response.request.url}"
+            "HTTP_TIME",
+            "Leer Body = ${(System.nanoTime() - bodyStart) / 1_000_000} ms"
         )
 
         Log.d(
-            "SEARCH_FLOW",
-            "Body (primeros 500): ${
-                body.take(500).replace("\n", " ")
-            }"
+            "HTTP_TIME",
+            "Tiempo total execute = ${(System.nanoTime() - totalStart) / 1_000_000} ms"
         )
 
         return Response(

@@ -27,11 +27,40 @@ class NewPipeVideoProvider : VideoProvider {
 
         try {
 
-            val extractor = ServiceList.YouTube.getSearchExtractor(query)
+            // Tiempo total
+            val totalStart = System.nanoTime()
+
+            // =============================
+            // Crear extractor
+            // =============================
+            val extractorStart = System.nanoTime()
+
+            val extractor =
+                ServiceList.YouTube.getSearchExtractor(query)
+
+            Log.d(
+                "SEARCH_TIME",
+                "Crear extractor = ${(System.nanoTime() - extractorStart) / 1_000_000} ms"
+            )
+
+            // =============================
+            // Fetch
+            // =============================
+            val fetchStart = System.nanoTime()
 
             extractor.fetchPage()
 
-            extractor.initialPage.items
+            Log.d(
+                "SEARCH_TIME",
+                "fetchPage = ${(System.nanoTime() - fetchStart) / 1_000_000} ms"
+            )
+
+            // =============================
+            // Conversión a VideoInfo
+            // =============================
+            val mapStart = System.nanoTime()
+
+            val videos = extractor.initialPage.items
                 .filterIsInstance<StreamInfoItem>()
                 .map { item ->
 
@@ -43,14 +72,37 @@ class NewPipeVideoProvider : VideoProvider {
                         author = item.uploaderName ?: "",
                         resolutions = emptyList()
                     )
+
                 }
+
+            Log.d(
+                "SEARCH_TIME",
+                "Map VideoInfo = ${(System.nanoTime() - mapStart) / 1_000_000} ms"
+            )
+
+            // =============================
+            // Tiempo total
+            // =============================
+            Log.d(
+                "SEARCH_TIME",
+                "Resultados = ${videos.size}"
+            )
+
+            Log.d(
+                "SEARCH_TIME",
+                "Tiempo total = ${(System.nanoTime() - totalStart) / 1_000_000} ms"
+            )
+
+            videos
 
         } catch (e: Exception) {
 
             Log.e("SEARCH_FLOW", "Error buscando videos", e)
 
             emptyList()
+
         }
+
     }
 
     override suspend fun openStream(
@@ -85,15 +137,13 @@ class NewPipeVideoProvider : VideoProvider {
 
             val length = body.contentLength()
 
-            Log.d(
-                "PLAYER_FLOW",
-                "Content-Length=$length"
-            )
-
             VideoTransfer(
                 input = body.byteStream(),
                 contentLength = length
             )
+
+
+
 
         } catch (e: Exception) {
 
